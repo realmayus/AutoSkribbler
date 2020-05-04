@@ -1,24 +1,21 @@
 import functools
 import sys
+import time
 import traceback
 import urllib
 import urllib.request
 from io import BytesIO
-from pyvirtualdisplay import Display
-import time
-from selenium import webdriver
 
 from PIL import Image
 from PIL.ImageQt import ImageQt
 from PyQt5.QtCore import Qt, QThread
 from PyQt5.QtGui import QFont, QPixmap
 from PyQt5.QtWidgets import QApplication, QLabel, QWidget, QVBoxLayout, QSizePolicy, QGridLayout, QGroupBox, \
-    QHBoxLayout, QPushButton, QGraphicsView, QCommandLinkButton, QFileDialog, QGraphicsScene, QGraphicsPixmapItem, \
-    QInputDialog, QErrorMessage, QMessageBox
-
+    QHBoxLayout, QPushButton, QCommandLinkButton, QFileDialog, QInputDialog, QMessageBox
 from pynput import mouse, keyboard
 from pynput.mouse import Controller, Button
-
+from selenium import webdriver
+from selenium.webdriver.chrome.options import Options
 
 WEBDRIVER_PATH = "/home/marius/chromedriver"
 
@@ -522,7 +519,7 @@ class ImageDrawingThread(QThread):
                     r, g, b = self.img.getpixel((x, y))
 
                     if r == 255 and g == 255 and b == 255:
-                        continue # skip white because canvas is… white
+                        continue  # skip white because canvas is… white
 
                     key = ' '.join([str(r), str(g), str(b)])
                     if key not in pixel_colors:
@@ -560,15 +557,10 @@ class Utils:
 
         search_url = "https://www.google.com/search?safe=off&site=&tbm=isch&source=hp&q={q}&oq={q}&gs_l=img"
 
-        # load the page
-        dont_use_pyvirtualdisplay = False
-        try:
-            display = Display(visible=0, size=(800, 600))
-            display.start()
-            dont_use_pyvirtualdisplay = False
-        except Exception:
-            dont_use_pyvirtualdisplay = True
-        wd = webdriver.Chrome(executable_path=WEBDRIVER_PATH)
+        chrome_options = Options()
+        chrome_options.add_argument("--headless")
+        chrome_options.add_argument("--window-size=1920x1080")
+        wd = webdriver.Chrome(executable_path=WEBDRIVER_PATH, options=chrome_options)
         wd.get(search_url.format(q=query))
 
         image_urls = set()
@@ -599,14 +591,10 @@ class Utils:
 
                 if len(image_urls) >= max_links_to_fetch:
                     print(f"Found: {len(image_urls)} image links, done!")
-                    if not dont_use_pyvirtualdisplay:
-                        display.stop()
                     return image_urls
 
             # move the result startpoint further down
             results_start = len(thumbnail_results)
-        if not dont_use_pyvirtualdisplay:
-            display.stop()
         return None
 
 
