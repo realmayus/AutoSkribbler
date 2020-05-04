@@ -409,6 +409,16 @@ class ImageDrawingThread(QThread):
         self.prev_cursor = self.mouse_controller.position
         self.mouse_controller.click(Button.left)
 
+    def move_one_step_to_right(self, step_size):
+        self.mouse_controller.move(step_size, 0)
+
+    def set_brush(self):
+        self.mouse_controller.position = self.main_window_instance.coords['colorsTopLeft']
+        print("setting brush")
+        self.mouse_controller.move(492, 24)
+        self.mouse_controller.press(Button.left)
+        self.mouse_controller.release(Button.left)
+
     def set_color(self, r, g, b):
         """yes I do know that this is dirty af but who cares :p"""
         self.mouse_controller.position = self.main_window_instance.coords['colorsTopLeft']
@@ -509,6 +519,31 @@ class ImageDrawingThread(QThread):
 
     def run(self) -> None:
         pixel_colors = {}
+
+        def has_neighbor(pixel1, pixel_map) -> bool:
+            # print(1)
+            # if pixel1 in pixel_map:
+            #     index_in_pixel_map = pixel_map.index(pixel1)
+            #     print(2)
+            #     pixelX, pixelY = pixel1
+            #     if len(pixel_map) - 1 == index_in_pixel_map:  # check if there even is a next pixel
+            #         print(3)
+            #         nextPixelX, nextPixelY = pixel_map[index_in_pixel_map + 1]  # nextPixel refers to the next pixel in the pixel map, not next to it in the pixel *grid*
+            #         if pixelY == nextPixelY and pixelX + 1 == nextPixelX:  # check if the current pixel and the next pixel are in the same line and if the current pixel plus one is the next pixel, i.e. it the next pixel is directly next to the current pixel
+            #             return True
+            #         else:
+            #             return False
+            #     else:
+            #         return False
+            # else:
+            #     return False
+            pixelX, pixelY = pixel1
+            pixelNext = (pixelX + 1, pixelY)
+            if pixelNext in pixel_map:
+                return True
+            else:
+                return False
+
         try:
             self.img.thumbnail((133, 100), Image.NEAREST)
             self.img = self.img.convert("RGB").quantize(palette=self.pal_image)
@@ -527,6 +562,7 @@ class ImageDrawingThread(QThread):
                     pixel_colors[key].append((x, y))
 
             print(pixel_colors)
+            self.set_brush()
             for kay in pixel_colors:
                 print(kay)
 
@@ -534,11 +570,32 @@ class ImageDrawingThread(QThread):
                 print(r, g, b)
                 self.set_color(r, g, b)
                 time.sleep(1)
-
+                i = 0
+                skip_amount = 0
                 for pixel in pixel_colors[kay]:
+                    if skip_amount > 0:
+                        skip_amount -= 1
+                        continue
                     x, y = pixel
-                    self.draw_pixel(x, y, 6)  # the brush has a diameter of 16
+                    if has_neighbor(pixel, pixel_colors[kay]):
+                        print("pixel ", x, y, " has a neighbor")
+                        canvasTopX, canvasTopY = self.main_window_instance.coords['canvasTopLeft']
+                        self.mouse_controller.position = (canvasTopX + (x * 6), canvasTopY + (y * 6))
+                        self.mouse_controller.press(Button.left)  # press the mouse button
+                        virtual_pixel = pixel  # the virtual_pixel is the pixel that will iterate through the current line
+                        currently_skipped = 0
+                        while has_neighbor(virtual_pixel, pixel_colors[kay]):
+                            print("iterating through the pixel", virtual_pixel[0], y, "'s neigbors…")
+                            self.move_one_step_to_right(6)  # move mouse six pixels to the right
+                            virtual_pixel = (virtual_pixel[0] + 1, y)  # move "virtual pixel" one to the right
+                            currently_skipped += 1
+                        self.mouse_controller.release(Button.left)  # release the mouse button
+                        skip_amount = currently_skipped
+                    else:
+                        print("pixel ", x, y, " has no neighbor")
+                        self.draw_pixel(x, y, 6)
                     time.sleep(0.0005)
+                    i += 1
 
 
         except Exception as e:
