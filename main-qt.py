@@ -11,15 +11,13 @@ from PIL.ImageQt import ImageQt
 from PyQt5.QtCore import Qt, QThread
 from PyQt5.QtGui import QFont, QPixmap
 from PyQt5.QtWidgets import QApplication, QLabel, QWidget, QVBoxLayout, QSizePolicy, QGridLayout, QGroupBox, \
-    QHBoxLayout, QPushButton, QCommandLinkButton, QFileDialog, QInputDialog, QMessageBox
+    QHBoxLayout, QPushButton, QCommandLinkButton, QFileDialog, QInputDialog, QMessageBox, QCheckBox
 from pynput import mouse, keyboard
 from pynput.mouse import Controller, Button
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 
 WEBDRIVER_PATH = "/home/marius/chromedriver"
-
-
 
 class MainWindow(QWidget):
     def __init__(self, *args, **kwargs):
@@ -72,6 +70,9 @@ class MainWindow(QWidget):
         self.layout.addWidget(self.currentActionSubLabel, 5, 0)
 
 
+        self.useImgWorkaroundCheckbox = QCheckBox("Use google images workaround (slow)")
+        self.layout.addWidget(self.useImgWorkaroundCheckbox, 6, 0)
+
         self.buttonbox = QHBoxLayout()
         self.btnSetCoords = QPushButton("Set Coords")
         self.btnSetCoords.clicked.connect(self.set_coords_btn_click)
@@ -82,7 +83,7 @@ class MainWindow(QWidget):
         self.buttonbox.addWidget(self.btnSetCoords)
         self.buttonbox.addWidget(self.btnSelImg)
         self.buttonbox.addWidget(self.btnStartDraw)
-        self.layout.addLayout(self.buttonbox, 6, 0)
+        self.layout.addLayout(self.buttonbox, 7, 0)
 
 
         self.setLayout(self.layout)
@@ -120,6 +121,8 @@ class MainWindow(QWidget):
         pixmap = QPixmap.fromImage(qimg)
         self.imgPreview.setPixmap(pixmap)
 
+    def clear_img_preview(self):
+        self.imgPreview.clear()
 
     def set_coords_btn_click(self):
         self.select_coords_thread.finished.connect(self.set_coords_finished)
@@ -175,7 +178,7 @@ class MainWindow(QWidget):
 
 
 class ImgOriginSelector(QWidget):
-    def __init__(self, main_window_instance, *args, **kwargs):
+    def __init__(self, main_window_instance: MainWindow, *args, **kwargs):
         QWidget.__init__(self, None, Qt.WindowStaysOnTopHint, *args, **kwargs)
         self.main_window = main_window_instance
         self.layout = QGridLayout()
@@ -191,9 +194,12 @@ class ImgOriginSelector(QWidget):
         local_image_button = QCommandLinkButton("Use local image")
         local_image_button.clicked.connect(self.select_local_img)
         self.buttonlayout.addWidget(local_image_button)
-        grab_image_button = QCommandLinkButton("Grab image from Google Images")
-        grab_image_button.clicked.connect(self.grab_img)
-        self.buttonlayout.addWidget(grab_image_button)
+        grab_image_button9 = QCommandLinkButton("Grab 9 images from Google Images")
+        grab_image_button9.clicked.connect(self.grab_img_9)
+        self.buttonlayout.addWidget(grab_image_button9)
+        grab_image_button5 = QCommandLinkButton("Grab 5 images from Google Images")
+        grab_image_button5.clicked.connect(self.grab_img_5)
+        self.buttonlayout.addWidget(grab_image_button5)
         self.layout.addLayout(self.buttonlayout, 1, 0)
         self.setLayout(self.layout)
 
@@ -213,10 +219,11 @@ class ImgOriginSelector(QWidget):
         self.close()
 
 
-    def grab_img(self):
+    def grab_img(self, count):
         text, ok = QInputDialog.getText(self, 'Enter search term', 'Search term:')
         if ok:
             self.GrabImagesThread.set_query(text)
+            self.GrabImagesThread.set_count(count)
             self.GrabImagesThread.finished.connect(self.img_download_done)
             self.GrabImagesThread.start()
             self.main_window.btnSetCoords.setEnabled(False)
@@ -225,11 +232,18 @@ class ImgOriginSelector(QWidget):
             self.main_window.currentActionLabel.setText("Grabbing images…")
             self.close()
 
+    def grab_img_9(self):
+        self.grab_img(9)
+
+    def grab_img_5(self):
+        self.grab_img(5)
+
     def img_download_done(self):
         self.main_window.btnSetCoords.setEnabled(True)
         self.main_window.btnStartDraw.setEnabled(True)
         self.main_window.currentActionLabel.setText(" ")
         self.main_window.currentActionSubLabel.setText(" ")
+        self.main_window.clear_img_preview()
         self.GrabSelector.start(self.main_window.img_cache)
 
 
@@ -264,16 +278,27 @@ class GrabImagesThread(QThread):
         QThread.__init__(self, *args, **kwargs)
         self.main_window_instance = main_window_instance
         self.query = None
+        self.count = 0
+
+    def set_count(self, count):
+        self.count = count
 
     def set_query(self, query):
         self.query = query
 
     def run(self) -> None:
-        url_list = Utils.fetch_image_urls(self.main_window_instance, self.query, 9, 0.2)
+        if self.main_window_instance.useImgWorkaroundCheckbox.isChecked():
+            url_list = Utils.fetch_image_urls(self.main_window_instance, self.query, self.count, 0.2)
+        else:
+            from google_images_download import google_images_download
+            response = google_images_download.googleimagesdownload()
+            URLs = response.download({"keywords": self.query, "limit": self.count, "no_download": True})
+            for kw in URLs[0]:
+                url_list = URLs[0][kw]
         lis = []
         i = 0
         for url in url_list:
-            self.main_window_instance.currentActionSubLabel.setText("Downloading " + str(i + 1) + "/9")
+            self.main_window_instance.currentActionSubLabel.setText("Downloading " + str(i + 1) + "/" + str(self.count))
             req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
             try:
                 res = urllib.request.urlopen(req)
@@ -630,7 +655,7 @@ class Utils:
             number_results = len(thumbnail_results)
             print(f"Found: {number_results} search results. Extracting links from {results_start}:{number_results}")
             for img in thumbnail_results[results_start:number_results]:
-                main_window_instance.currentActionSubLabel.setText("Grabbing " + str(image_count + 1) + "/9")
+                main_window_instance.currentActionSubLabel.setText("Grabbing " + str(image_count + 1) + "/" + str(max_links_to_fetch))
                 # try to click every thumbnail such that we can get the real image behind it
                 try:
                     img.click()
