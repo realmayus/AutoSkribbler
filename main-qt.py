@@ -17,7 +17,7 @@ from pynput.mouse import Controller, Button
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 
-WEBDRIVER_PATH = "/home/marius/chromedriver"
+WEBDRIVER_PATH = "./chromedriver"
 
 class MainWindow(QWidget):
     def __init__(self, *args, **kwargs):
